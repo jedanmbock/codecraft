@@ -2,7 +2,7 @@
 import os
 # --- CHANGEMENT ICI ---
 from codecraft.core.llm_backend import GeminiWrapper 
-from codecraft.memory.vector_store import SimpleVectorStore
+from codecraft.memory.vector_store import ChromaVectorStore
 from codecraft.verification.static_analyzer import PythonStaticAnalyzer
 from codecraft.agent.react_engine import CodeCraftAgent
 
@@ -22,27 +22,36 @@ def main():
         return
 
     # 2. Le reste ne change pas (C'est la beauté du modulaire)
-    memory = SimpleVectorStore()
+    memory = ChromaVectorStore()
     
     # Assurez-vous d'avoir gardé le static_analyzer robuste qu'on a fait avant
     verifier = PythonStaticAnalyzer() 
     
     agent = CodeCraftAgent(llm, memory, verifier)
     
-    # 3. Données de test
-    bad_code = """
+    # 3. Simulation : On "lit" un fichier existant dans la mémoire
+    # Imaginons que ceci est le contenu d'un fichier 'pricing.py' sur le disque
+    file_content = """
+import os
+
 def calculate_price(base):
-    # Tax calculation
+    # Legacy pricing logic
     tax = base * 0.2
     total = base + tax
-    # Vulnerability here
-    eval(f"print('Price calculated: {total}')") 
+    eval(f"print('Logging price: {total}')") # Security flaw
     return total
-    """
-    memory.add_code_artifact(bad_code, {"function_name": "calculate_price"})
+
+class UserAuth:
+    def login(self, creds):
+        pass
+"""
+    # L'agent découpe ce fichier via AST et stocke les fonctions séparément
+    memory.add_code_artifact(file_content, {"filename": "pricing.py"})
     
     # 4. Exécution
-    task = "La taxe est de 15%."
+    # Grâce au RAG, l'agent va retrouver SEULEMENT la fonction calculate_price
+    # même si on ne lui donne pas explicitement.
+    task = "Il y a une faille de sécurité dans le calcul des prix. Corrige-la."
     
     print("\n--- Démarrage de l'Agent ---")
     result = agent.run(task)
